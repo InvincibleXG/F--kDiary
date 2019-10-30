@@ -1,4 +1,4 @@
-#Spring 子事务不能单独回滚的原因
+# Spring 子事务不能单独回滚的原因
 
 最近看到一个例子，提问为啥在 `Spring` 中， **事务A方法调用相同类中的事务B方法** ，而「事务B方法出错了不能影响A方法的执行」，但是当事务B方法里出现异常时，事务B并不能回滚。即使B方法的catch块中声明`TransactionAspectSupport.currentTransactionStatus().setRollbackOnly()；` 
 
