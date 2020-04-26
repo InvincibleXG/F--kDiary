@@ -52,7 +52,82 @@
 
 8. 测试 pulsar
 
-   1. gg  mac上报错，表示对我的主机名无法解析。。。后续调好再更！
+   1. 如果你是 类unix系统，比如我是 macOS，那就需要在 `etc/hosts` 文件中，把本机的 IP 和 hostname 映射关系配置好，否则会出现 java 底层调用异常，无法解析主机
 
-   
+   2. 由于我们使用的 pulsar版本 是 2.4.0，因此 maven 依赖如下
+
+      ```java
+      		<dependency>
+      			<groupId>org.apache.pulsar</groupId>
+      			<artifactId>pulsar-client</artifactId>
+      			<version>2.4.0</version>
+      		</dependency>
+      ```
+
+   3. 启动消费者订阅 my-topic
+
+      ```java
+      public class PulsarConsumer {
+          private static String localClusterUrl = "pulsar://127.0.0.1:6653";
+      
+          public static void main(String[] args) {
+              try {
+                  //将订阅消费者指定的主题消息
+                  Consumer<byte[]> consumer = getClient().newConsumer()
+                          .topic("persistent://my-tenant/my-namespace/my-topic")
+                          .subscriptionName("my-subscription")
+                          .subscribe();
+                  while (true) {
+                      Message msg = consumer.receive();
+                      System.out.printf("consumer-Message received: %s. \n", new String(msg.getData()));
+                      // 确认消息，以便broker删除消息
+                      consumer.acknowledge(msg);
+                  }
+              } catch (Exception e) {
+                  e.printStackTrace();
+              }
+          }
+      
+          public static PulsarClient getClient() throws Exception {
+              PulsarClient client;
+              client = PulsarClient.builder().serviceUrl(localClusterUrl).build();
+              return client;
+          }
+      }
+      ```
+
+      
+
+   4. 启动生产者发送消息到 my-topic，消费者每次都可以接收消息并打印出来。但是如果消费者先不启动，生产者发送完消息后，消费者再起，那么消费者是消费不到之前的消息的，这个可能跟订阅的模式或者消息的持久化有关，后续再研究。
+
+      ```java
+      public class PulsarProducer {
+          // 连接集群 broker
+          private static String localClusterUrl = "pulsar://127.0.0.1:6653";
+      
+          public static void main(String[] args) {
+              try {
+                  Producer<byte[]> producer = getProducer();
+                  String msg = "hello world pulsar!";
+      
+                  Long start = System.currentTimeMillis();
+                  MessageId msgId = producer.send(msg.getBytes());
+                  System.out.println("spend=" + (System.currentTimeMillis() - start) + ";send a message msgId = " + msgId.toString());
+              } catch (Exception e) {
+                  e.printStackTrace();
+              }
+          }
+      
+          public static Producer<byte[]> getProducer() throws Exception {
+              PulsarClient client;
+              client = PulsarClient.builder().serviceUrl(localClusterUrl).build();
+              Producer<byte[]> producer = client.newProducer().topic("persistent://my-tenant/my-namespace/my-topic").producerName("producerName").create();
+              return producer;
+          }
+      }
+      ```
+
+      
+
+   这样最简单的一个pulsar单机集群就部署好了，更多特性就可以接着慢慢尝试了。
 
