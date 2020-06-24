@@ -179,7 +179,7 @@ http_requests_total{environment=~"staging|testing|development",method!="GET"}
 
 ##### 1.2.2 区间向量选择器
 
-区间向量选择器类似于瞬时向量选择器，不同的是它选择的是**过去一段时间的采样值**。可以通过在瞬时向量选择器后面添加包含在 `[]` 里的时长来得到区间向量选择器。比如下面的表达式选出了所有度量指标为 `http_requests_total` 且 `job` 为 `prometheus` 的时序在过去 5 分钟的采样值。
+区间向量选择器类似于瞬时向量选择器，不同的是它选择的是**过去一段时间的采样值**。可以通过在瞬时向量选择器后面添加包含在 `[]` 里的时长来得到区间向量选择器。比如下面的表达式选出了所有度量指标为 `http_requests_total` 且 `job` 为 `prometheus` 的时序在过去 5 分钟内的采样值。
 
 ```bash
 http_requests_total{job="prometheus"}[5m]
