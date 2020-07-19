@@ -23,7 +23,7 @@
 
 5. 启动 bk集群：
 
-   1. 配好以后现在本机任意一个 bk 的 bin 目录下初始化集群元数据 `bookkeeper shell metaformat`  「zk重启的话也就是bk第一次启动都要初始化集群元数据」
+   1. 配好以后现在本机任意一个 bk 的 bin 目录下初始化集群元数据 `bookkeeper shell metaformat`  「zk里面没有`ledgers\INSTANCEID`的话 也就是bk第一次启动要初始化集群元数据。后面如果多次初始化会造成INSTANCEID变更，也就是$journalDirectories$和$ledgerDirectories$中`current/VERSION`文件内容变更。这样很可能导致zk上的`ledgers\INSTANCEID`与当前INSTANCEID不一致，从而启动bookie报错 —— **不一致的话要么在启动bk前清除每个集群节点的current目录，要么初始化元数据以后用zk里`ledgers\INSTANCEID`的值修改每个集群节点的`current/VERSION`，要么修改`ledgers\INSTANCEID`的值为旧INSTANCEID**」
    2. bookkeeper bookie 启动每一个bk实例，构成集群（如果上述 4-6点 的目录配置有冲突启动就会报错not match）
    3. 启动无报错后，在任意实例的bin目录下进行测试 `bookkeeper shell bookiesanity`，测试succeed说明集群可用
 
