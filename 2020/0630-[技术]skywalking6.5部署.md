@@ -72,11 +72,11 @@ storage:
     indexReplicasNumber: ${SW_STORAGE_ES_INDEX_REPLICAS_NUMBER:0}
     # Those data TTL settings will override the same settings in core module.
     recordDataTTL: ${SW_STORAGE_ES_RECORD_DATA_TTL:7} # Unit is day
-    otherMetricsDataTTL: ${SW_STORAGE_ES_OTHER_METRIC_DATA_TTL:45} # Unit is day
-    monthMetricsDataTTL: ${SW_STORAGE_ES_MONTH_METRIC_DATA_TTL:18} # Unit is month
+    otherMetricsDataTTL: ${SW_STORAGE_ES_OTHER_METRIC_DATA_TTL:1} # Unit is day
+    monthMetricsDataTTL: ${SW_STORAGE_ES_MONTH_METRIC_DATA_TTL:1} # Unit is month
     # Batch process setting, refer to https://www.elastic.co/guide/en/elasticsearch/client/java-api/5.5/java-docs-bulk-processor.html
-    bulkActions: ${SW_STORAGE_ES_BULK_ACTIONS:1000} # Execute the bulk every 1000 requests
-    bulkSize: ${SW_STORAGE_ES_BULK_SIZE:20} # flush the bulk every 20mb
+    bulkActions: ${SW_STORAGE_ES_BULK_ACTIONS:100} # Execute the bulk every 100 requests
+    bulkSize: ${SW_STORAGE_ES_BULK_SIZE:10} # flush the bulk every 10mb
     flushInterval: ${SW_STORAGE_ES_FLUSH_INTERVAL:10} # flush the bulk every 10 seconds whatever the number of requests
     concurrentRequests: ${SW_STORAGE_ES_CONCURRENT_REQUESTS:2} # the number of concurrent requests
     resultWindowMaxSize: ${SW_STORAGE_ES_QUERY_MAX_WINDOW_SIZE:10000}
@@ -106,4 +106,8 @@ collector:
 配完以后可以知道，ES起在9200端口，SW backend 监听 11800 和 12800，SW web 用12800 与 backend 通信，agent默认就推送到 11800 端口给 backend。
 
 java 启动的时候 带上参数 -DSW_AGENT_NAME=appName 即可覆盖 agent.config 里的应用名，实现 agent 复用。
+
+(-D后面的参数名，就是配置文件里给出的大写字母)
+
+另外，在agent.config中，最好关注下日志级别，应用启动以后，默认会在`skywalking-agent.jar`所在目录的logs目录下疯狂打日志，如果SW挂了，这边日志也是不会停的，所以务必注意。
 
