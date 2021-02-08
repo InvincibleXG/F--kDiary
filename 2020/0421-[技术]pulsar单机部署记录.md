@@ -131,3 +131,181 @@
 
    这样最简单的一个pulsar单机集群就部署好了，更多特性就可以接着慢慢尝试了。
 
+
+
+
+
+# Pulsar Functions
+
+1. 首先来修改 `function_works.yml`
+
+   ```yaml
+   workerId: worker6751
+   workerHostname: 127.0.0.1
+   workerPort: 6751
+   workerPortTls: 16751
+   
+   # Configuration Store connection string
+   configurationStoreServers: 127.0.0.1:12181,127.0.0.1:12182,127.0.0.1:12183
+   
+   
+   # pulsar topics used for function metadata management
+   
+   pulsarFunctionsNamespace: my-tenant/functions
+   pulsarFunctionsCluster: pulsar-wyf
+   functionMetadataTopicName: metadata
+   clusterCoordinationTopicName: coordinate
+   # Number of threads to use for HTTP requests processing. Default is set to 8
+   numHttpServerThreads: 8
+   ```
+
+   
+
+   基本上也就是指定 `functions-worker Server` 的 Id、主机地址还有端口信息，配置存放在我们之前配置的zk集群上，并且将functions任务调度的 Cluster-Namespace 指定为我们想要的，这样 assignments Topic 就会生成在指定的 namespace 下
+
+2. 然后 启动 `functions-worker Server` ， 在bin目录下键入「 pulsar functions-worker 」，如果配置都对的上的话大概率是会生成一个 server 的 URL：
+
+   15:15:29.113 [main] INFO org.eclipse.jetty.server.Server - Started @4076ms
+
+   15:15:29.113 [main] INFO org.apache.pulsar.functions.worker.rest.WorkerServer - Worker Server started at **http://127.0.0.1:6751/admin**
+
+   15:15:29.113 [main] INFO org.apache.pulsar.functions.worker.Worker - Start worker server on port 6751...
+
+3. 然后我们就可以将编写好的 functions 代码打包，放到指定位置，并创建function:
+
+   ```java
+   import org.apache.pulsar.client.api.Producer;
+   import org.apache.pulsar.client.api.PulsarClient;
+   import org.apache.pulsar.client.api.PulsarClientException;
+   import org.apache.pulsar.functions.api.Context;
+   import org.apache.pulsar.functions.api.Function;
+   import org.slf4j.Logger;
+   
+   import java.util.HashMap;
+   import java.util.Map;
+   
+   /**
+    * in: persistent://my-tenant/my-namespace/my-topic
+    * out: persistent://tenant0/namespace0/wyf-share
+    * 这是一个将 输入topic中数值类型的字符串 过滤到输出topic 的function  如果在function上配置了outTopic 就会发双倍消息
+    * @author wyf
+    * @date 2021/2/7 09:01
+    */
+   public class FunctionTest implements Function<byte[], byte[]> {
+       private static Logger log;
+       private static PulsarClient client;
+   
+       private boolean initFlag;
+   
+       private Producer<byte[]> numberProducer;
+   
+       @Override
+       public byte[] process(byte[] messageIn, Context context) throws Exception {
+           if (!initFlag) {
+               log = context.getLogger();
+               //  do init
+               init(context);
+               initFlag = true;
+           }
+           try {
+               String msg = new String(messageIn);
+               Long.parseLong(msg);
+               // 将number消息滤出来
+               numberProducer.send(messageIn);
+               context.getCurrentRecord().ack();
+               // 如果在创建和更新function的时候指定了output topic 只要返回值不为null 就会自动发送
+               return messageIn;
+           } catch (NumberFormatException e) {
+               if (log.isInfoEnabled()) {
+                   log.info("消息格式不合规 直接滤除");
+               }
+               context.getCurrentRecord().ack();
+           } catch (Throwable anyThrowable) {
+               context.getCurrentRecord().fail();
+           }
+           return null;
+       }
+   
+       private void init(Context context) throws PulsarClientException {
+           Map<String, Object> userConfigMap = context.getUserConfigMap();
+           if (null != userConfigMap && !userConfigMap.isEmpty()) {
+               String topicInfoString = (String) userConfigMap.get("topic_info");
+               //topic=persistent://tenant0/namespace0/wyf-share;url=pulsar://127.0.0.1:6651
+               String[] configArray = topicInfoString.split(";");
+               HashMap<String, String> map = new HashMap<>();
+               for (String entry : configArray) {
+                   String[] topSimple = entry.split("=");
+                   map.put(topSimple[0], topSimple[1]);
+               }
+               if (log.isInfoEnabled()) {
+                   log.info("configMap =>\n" + map);
+               }
+   
+               if (client == null) {
+                   try {
+                       client = PulsarClient.builder().serviceUrl(map.get("url")).build();
+                   } catch (PulsarClientException e) {
+                       log.error("init pulsar client error", e);
+                   }
+               }
+               numberProducer = client.newProducer().topic(map.get("topic")).create();
+           }
+       }
+   }
+   ```
+
+   对应的shell为
+
+   ```shell
+   pulsar-admin --admin-url http://127.0.0.1:6751 functions create \
+     --parallelism 2 \
+     --processing-guarantees 'ATLEAST_ONCE' \
+     --jar '/Users/wyf/opt/test-1.0-SNAPSHOT.jar' \
+     --classname 'test.pulsar.function.FunctionTest' \
+     --auto-ack false \
+     --inputs 'persistent://my-tenant/my-namespace/my-topic' \
+     --output 'persistent://tenant0/namespace0/wyf-share' \
+     --user-config '{"topic_info":"topic=persistent://tenant0/namespace0/wyf-share;url=pulsar://127.0.0.1:6651"}' \
+     --tenant 'my-tenant' \
+     --namespace 'functions' \
+     --name 'function_test'
+     
+    
+    
+    pulsar-admin --admin-url http://127.0.0.1:6751 functions start \
+     --tenant 'my-tenant' \
+     --namespace 'functions' \
+     --name 'function_test'
+   ```
+
+   就可以启动function啦，执行一些流处理任务
+
+4. 可以看看日志 
+
+   more /Users/wyf/opt/apache-pulsar-2.4.0-1/logs/functions/my-tenant/functions/function_test/function_test-1.log
+
+   > 14:32:16.551 [pulsar-timer-4-1] INFO org.apache.pulsar.client.impl.ConsumerStatsRecorderImpl - [persistent://my-tenant/my-namespace/my-topic-partition-0] [my-tenant/functions/function_test] [5fa1b] Prefetched messages: 0 --- Consume throughput received: 0.02 msgs/s --- 0.00 Mbit/s --- Ack sent rate: 0.03 ack/s --- Failed messages: 0 --- Failed acks: 0
+   >
+   > 14:32:16.557 [pulsar-timer-4-1] INFO org.apache.pulsar.client.impl.ConsumerStatsRecorderImpl - [persistent://my-tenant/my-namespace/my-topic-partition-1] [my-tenant/functions/function_test] [5fa1b] Prefetched messages: 0 --- Consume throughput received: 0.02 msgs/s --- 0.00 Mbit/s --- Ack sent rate: 0.02 ack/s --- Failed messages: 0 --- Failed acks: 0
+   >
+   > 14:32:16.563 [pulsar-timer-4-1] INFO org.apache.pulsar.client.impl.ConsumerStatsRecorderImpl - [persistent://my-tenant/my-namespace/my-topic-partition-2] [my-tenant/functions/function_test] [5fa1b] Prefetched messages: 0 --- Consume throughput received: 0.02 msgs/s --- 0.00 Mbit/s --- Ack sent rate: 0.03 ack/s --- Failed messages: 0 --- Failed acks: 0
+   >
+   > 14:32:17.042 [my-tenant/functions/function_test-1] INFO function-function_test - 消息格式不合规 直接滤除
+   >
+   > 14:32:19.062 [my-tenant/functions/function_test-1] INFO function-function_test - 消息格式不合规 直接滤除
+   >
+   > 14:32:21.081 [my-tenant/functions/function_test-1] INFO function-function_test - 消息格式不合规 直接滤除
+   >
+   > 14:32:23.098 [my-tenant/functions/function_test-1] INFO function-function_test - 消息格式不合规 直接滤除
+   >
+   > 14:32:30.161 [my-tenant/functions/function_test-1] INFO function-function_test - 消息格式不合规 直接滤除
+   >
+   > 14:32:31.172 [my-tenant/functions/function_test-1] INFO function-function_test - 消息格式不合规 直接滤除
+   >
+   > 14:32:36.221 [my-tenant/functions/function_test-1] INFO function-function_test - 消息格式不合规 直接滤除
+
+反正最终现象就是，输入topic里的偶数时间戳字符串，被发送到了输出topic里双份，这也是意料之中的结果。
+
+
+
+其他停止、更新、删除等等，自行了解吧。
